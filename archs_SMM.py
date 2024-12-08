@@ -17,9 +17,9 @@ class SELayer(nn.Module):
         self.channel=channel
         self.reduction=reduction
         self.fc2 =nn.Sequential(
-            nn.Linear(self.channel*2, 2, bias=False),
+            nn.Linear(self.channel*2, reduction, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(2, self.channel*2, bias=False),
+            nn.Linear(reduction, self.channel*2, bias=False),
             nn.Sigmoid()
             
         )
@@ -49,17 +49,9 @@ class PVMLayer(nn.Module):
                 expand=expand,    # Block expansion factor
         )
         self.proj = nn.Linear(input_dim, output_dim)
-        
-        #self.proj = nn.Sequential(
-            #nn.Linear(input_dim, input_dim//2),
-            #nn.ReLU(inplace=True),
-            #nn.Linear(input_dim//2, output_dim),
-        #)
-        
-        
         self.skip_scale= nn.Parameter(torch.ones(1))
         
-        self.se = SELayer(input_dim//4,16)
+        self.se = SELayer(input_dim//4,2)
         
         self.Conv = nn.Sequential(
             nn.Conv2d(input_dim//4, input_dim//4, 3, stride=1, padding=1),
@@ -201,13 +193,9 @@ class F_PVMLayer(nn.Module):
         out5 = x_mamba5.transpose(-1, -2).reshape(B, 48, *img_dims)
         return F.gelu(out1),F.gelu(out2),F.gelu(out3),F.gelu(out4),F.gelu(out5)#out1,out2,out3,out4,out5
 
-class UltraLight_VM_UNet(nn.Module):
-    def __init__(self,  num_classes=1, input_channels=3, deep_supervision=False,img_size=224, patch_size=16, in_chans=3,  embed_dims=[32, 64, 128, 512],
-                 num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
-                 attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
-                 depths=[1, 1, 1], sr_ratios=[8, 4, 2, 1], c_list=[8,16,24,32,48,64], split_att='fc', bridge=True, **kwargs):#,  [8,16,24,32,48,64] [16,24,32,48,64,128]
+class SMM_UNet(nn.Module):
+    def __init__(self,  num_classes=1, input_channels=3, **kwargs):#
         super().__init__()
-        self.bridge = bridge
 
         self.encoder1 = nn.Sequential(
             nn.Conv2d(input_channels, c_list[0], 3, stride=1, padding=1),
@@ -227,10 +215,6 @@ class UltraLight_VM_UNet(nn.Module):
         self.encoder6 = nn.Sequential(
             PVMLayer(input_dim=c_list[4], output_dim=c_list[5])
         )
-
-        #if bridge: 
-            #self.scab = SC_Att_Bridge(c_list, split_att)
-            #print('SC_Att_Bridge was used')
         
         self.decoder1 = nn.Sequential(
             PVMLayer(input_dim=c_list[5], output_dim=c_list[4])
@@ -339,5 +323,5 @@ class UltraLight_VM_UNet(nn.Module):
         
         out0 = F.interpolate(self.final(out1),scale_factor=(2,2),mode ='bilinear',align_corners=True) # b, num_class, H, W
         
-        return out0,info_loss
+        return out0
 
